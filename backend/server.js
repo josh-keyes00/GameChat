@@ -147,31 +147,34 @@ const tlsCompatOptions = {
     'rsa_pkcs1_sha1',
     'ecdsa_secp256r1_sha256',
     'ecdsa_secp384r1_sha384',
-    'ecdsa_secp521r1_sha512',
-    'ecdsa_sha1'
+    'ecdsa_secp521r1_sha512'
   ].join(':')
 };
 
 const httpServer = http.createServer(app);
 
 let httpsServer;
-if (config.tlsKeyPath && config.tlsCertPath) {
-  const key = fs.readFileSync(config.tlsKeyPath);
-  const cert = fs.readFileSync(config.tlsCertPath);
-  httpsServer = https.createServer({ key, cert, ...tlsCompatOptions }, app);
-  console.log('HTTPS enabled for backend server (custom cert).');
-} else {
+
+async function createHttpsServer() {
+  if (config.tlsKeyPath && config.tlsCertPath) {
+    const key = fs.readFileSync(config.tlsKeyPath);
+    const cert = fs.readFileSync(config.tlsCertPath);
+    console.log('HTTPS enabled for backend server (custom cert).');
+    return https.createServer({ key, cert, ...tlsCompatOptions }, app);
+  }
+
   const attrs = [{ name: 'commonName', value: 'localhost' }];
-  const pems = selfsigned.generate(attrs, {
+  let pems = selfsigned.generate(attrs, {
     days: 365,
-    keySize: 2048,
+    keyType: 'ec',
+    curve: 'P-256',
     algorithm: 'sha256',
     extensions: [
       { name: 'basicConstraints', cA: false },
       {
         name: 'keyUsage',
         digitalSignature: true,
-        keyEncipherment: true
+        keyAgreement: true
       },
       { name: 'extKeyUsage', serverAuth: true },
       {
@@ -183,7 +186,17 @@ if (config.tlsKeyPath && config.tlsCertPath) {
       }
     ]
   });
-  httpsServer = https.createServer(
+
+  if (typeof pems?.then === 'function') {
+    pems = await pems;
+  }
+
+  if (!pems?.private || !pems?.cert) {
+    throw new Error('Failed to generate HTTPS self-signed certificate.');
+  }
+
+  console.log('HTTPS enabled for backend server (self-signed ECDSA).');
+  return https.createServer(
     {
       key: pems.private,
       cert: pems.cert,
@@ -191,11 +204,12 @@ if (config.tlsKeyPath && config.tlsCertPath) {
     },
     app
   );
-  console.log('HTTPS enabled for backend server (self-signed).');
 }
 
-if (debugTls) {
-  httpsServer.on('secureConnection', (tlsSocket) => {
+function attachTlsDebug(server) {
+  if (!debugTls) return;
+
+  server.on('secureConnection', (tlsSocket) => {
     const protocol = tlsSocket.getProtocol();
     const cipher = tlsSocket.getCipher();
     console.log('[tls] secure connection', {
@@ -205,7 +219,7 @@ if (debugTls) {
     });
   });
 
-  httpsServer.on('tlsClientError', (err, tlsSocket) => {
+  server.on('tlsClientError', (err, tlsSocket) => {
     console.error('[tls] client error', {
       remote: tlsSocket ? `${tlsSocket.remoteAddress}:${tlsSocket.remotePort}` : 'unknown',
       message: err.message
@@ -230,34 +244,34 @@ function createSocketServer(server) {
   });
 }
 
-const ioHttp = createSocketServer(httpServer);
-const ioHttps = createSocketServer(httpsServer);
+function setupRealtime(httpsServerInstance) {
+  const ioHttp = createSocketServer(httpServer);
+  const ioHttps = createSocketServer(httpsServerInstance);
 
-ioHttp.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
-});
+  ioHttp.use((socket, next) => {
+    sessionMiddleware(socket.request, {}, next);
+  });
 
-ioHttps.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
-});
+  ioHttps.use((socket, next) => {
+    sessionMiddleware(socket.request, {}, next);
+  });
 
-registerChatSockets(ioHttp);
-registerVoiceSockets(ioHttp);
-registerChatSockets(ioHttps);
-registerVoiceSockets(ioHttps);
+  registerChatSockets(ioHttp);
+  registerVoiceSockets(ioHttp);
+  registerChatSockets(ioHttps);
+  registerVoiceSockets(ioHttps);
 
-const ioBroadcast = {
-  to(room) {
-    return {
-      emit(event, payload) {
-        ioHttp.to(room).emit(event, payload);
-        ioHttps.to(room).emit(event, payload);
-      }
-    };
-  }
-};
-
-app.set('io', ioBroadcast);
+  app.set('io', {
+    to(room) {
+      return {
+        emit(event, payload) {
+          ioHttp.to(room).emit(event, payload);
+          ioHttps.to(room).emit(event, payload);
+        }
+      };
+    }
+  });
+}
 
 const muxServer = net.createServer((socket) => {
   let buffered = Buffer.alloc(0);
@@ -329,6 +343,9 @@ const muxServer = net.createServer((socket) => {
 async function start() {
   await initDb();
   await seedAll();
+  httpsServer = await createHttpsServer();
+  attachTlsDebug(httpsServer);
+  setupRealtime(httpsServer);
 
   httpServer.listen(httpPort, () => {
     console.log(`HTTP backend listening on ${httpPort}`);
