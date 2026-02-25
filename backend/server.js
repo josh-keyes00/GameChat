@@ -24,6 +24,19 @@ const app = express();
 
 const isProd = process.env.NODE_ENV === 'production';
 const allowedOrigins = new Set(config.clientOrigins || []);
+const debugTls = process.env.DEBUG_TLS === '1';
+const debugMux = process.env.DEBUG_MUX === '1';
+
+function previewBytes(buffer, max = 16) {
+  const slice = buffer.subarray(0, Math.min(buffer.length, max));
+  const hex = Array.from(slice)
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join(' ');
+  const ascii = slice
+    .toString('ascii')
+    .replace(/[^\x20-\x7E]/g, '.');
+  return { hex, ascii };
+}
 
 // Allow secure cookies and correct protocol detection when behind a proxy/tunnel.
 app.set('trust proxy', 1);
@@ -161,6 +174,25 @@ if (config.tlsKeyPath && config.tlsCertPath) {
   console.log('HTTPS enabled for backend server (self-signed).');
 }
 
+if (debugTls) {
+  httpsServer.on('secureConnection', (tlsSocket) => {
+    const protocol = tlsSocket.getProtocol();
+    const cipher = tlsSocket.getCipher();
+    console.log('[tls] secure connection', {
+      remote: `${tlsSocket.remoteAddress}:${tlsSocket.remotePort}`,
+      protocol,
+      cipher: cipher ? cipher.name : 'unknown'
+    });
+  });
+
+  httpsServer.on('tlsClientError', (err, tlsSocket) => {
+    console.error('[tls] client error', {
+      remote: tlsSocket ? `${tlsSocket.remoteAddress}:${tlsSocket.remotePort}` : 'unknown',
+      message: err.message
+    });
+  });
+}
+
 function createSocketServer(server) {
   return new Server(server, {
     path: '/socket.io',
@@ -217,6 +249,9 @@ const muxServer = net.createServer((socket) => {
     if (buffer.slice(0, 6).toString('ascii') === 'PROXY ') {
       const end = buffer.indexOf('\r\n');
       if (end === -1) return { buffer, done: false };
+      if (debugMux) {
+        console.log(`[mux] stripped proxy protocol v1 header (${end + 2} bytes)`);
+      }
       return { buffer: buffer.slice(end + 2), done: true };
     }
 
@@ -227,6 +262,9 @@ const muxServer = net.createServer((socket) => {
       const len = buffer.readUInt16BE(14);
       const total = 16 + len;
       if (buffer.length < total) return { buffer, done: false };
+      if (debugMux) {
+        console.log(`[mux] stripped proxy protocol v2 header (${total} bytes)`);
+      }
       return { buffer: buffer.slice(total), done: true };
     }
 
@@ -244,6 +282,15 @@ const muxServer = net.createServer((socket) => {
 
     const isTls = buffered[0] === 22;
     const targetPort = isTls ? httpsPort : httpPort;
+    if (debugMux) {
+      const preview = previewBytes(buffered);
+      console.log('[mux] first bytes', {
+        tls: isTls,
+        targetPort,
+        hex: preview.hex,
+        ascii: preview.ascii
+      });
+    }
     const upstream = net.connect(targetPort, '127.0.0.1', () => {
       upstream.write(buffered);
       socket.pipe(upstream).pipe(socket);
