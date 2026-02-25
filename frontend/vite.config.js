@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -8,10 +9,16 @@ export default defineConfig(({ mode }) => {
   const hmrPort = env.VITE_HMR_PORT ? Number(env.VITE_HMR_PORT) : 443;
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      // Playit terminates HTTPS; Vite must speak TLS locally to avoid SSL protocol errors.
+      basicSsl()
+    ],
     server: {
       host: '0.0.0.0',
       port: 5173,
+      strictPort: true,
+      https: true,
       allowedHosts: true,
       hmr: hmrHost
         ? {
