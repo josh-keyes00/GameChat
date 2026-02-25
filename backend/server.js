@@ -143,7 +143,8 @@ if (config.tlsKeyPath && config.tlsCertPath) {
   const attrs = [{ name: 'commonName', value: 'localhost' }];
   const pems = selfsigned.generate(attrs, {
     days: 365,
-    keySize: 2048,
+    keyType: 'ec',
+    curve: 'P-256',
     algorithm: 'sha256',
     extensions: [
       { name: 'basicConstraints', cA: false },
