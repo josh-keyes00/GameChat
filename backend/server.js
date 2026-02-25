@@ -42,6 +42,9 @@ function isOriginAllowed(origin) {
   const host = getHostFromOrigin(origin);
   if (!host) return false;
 
+  // Always allow local development origins.
+  if (host === 'localhost' || host === '127.0.0.1') return true;
+
   for (const entry of allowedOrigins) {
     if (entry.startsWith('*.')) {
       const suffix = entry.slice(1);
