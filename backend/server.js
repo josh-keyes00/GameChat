@@ -131,20 +131,40 @@ app.get('*', (req, res) => {
 const httpPort = config.port + 1;
 const httpsPort = config.port + 2;
 
+// TLS compatibility settings for Playit tunnel TLS clients.
+// NOTE: This is intentionally permissive to avoid handshake failures.
+const tlsCompatOptions = {
+  minVersion: 'TLSv1.2',
+  ciphers: 'ALL:@SECLEVEL=0',
+  honorCipherOrder: true,
+  sigalgs: [
+    'rsa_pss_rsae_sha256',
+    'rsa_pss_rsae_sha384',
+    'rsa_pss_rsae_sha512',
+    'rsa_pkcs1_sha256',
+    'rsa_pkcs1_sha384',
+    'rsa_pkcs1_sha512',
+    'rsa_pkcs1_sha1',
+    'ecdsa_secp256r1_sha256',
+    'ecdsa_secp384r1_sha384',
+    'ecdsa_secp521r1_sha512',
+    'ecdsa_sha1'
+  ].join(':')
+};
+
 const httpServer = http.createServer(app);
 
 let httpsServer;
 if (config.tlsKeyPath && config.tlsCertPath) {
   const key = fs.readFileSync(config.tlsKeyPath);
   const cert = fs.readFileSync(config.tlsCertPath);
-  httpsServer = https.createServer({ key, cert, minVersion: 'TLSv1.2' }, app);
+  httpsServer = https.createServer({ key, cert, ...tlsCompatOptions }, app);
   console.log('HTTPS enabled for backend server (custom cert).');
 } else {
   const attrs = [{ name: 'commonName', value: 'localhost' }];
   const pems = selfsigned.generate(attrs, {
     days: 365,
-    keyType: 'ec',
-    curve: 'P-256',
+    keySize: 2048,
     algorithm: 'sha256',
     extensions: [
       { name: 'basicConstraints', cA: false },
@@ -167,7 +187,7 @@ if (config.tlsKeyPath && config.tlsCertPath) {
     {
       key: pems.private,
       cert: pems.cert,
-      minVersion: 'TLSv1.2'
+      ...tlsCompatOptions
     },
     app
   );
