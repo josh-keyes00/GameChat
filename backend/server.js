@@ -192,17 +192,55 @@ const ioBroadcast = {
 app.set('io', ioBroadcast);
 
 const muxServer = net.createServer((socket) => {
-  socket.once('data', (chunk) => {
-    const isTls = chunk[0] === 22;
+  let buffered = Buffer.alloc(0);
+
+  function stripProxyProtocol(buffer) {
+    if (buffer.length === 0) return { buffer, done: true };
+
+    // Proxy Protocol v1 starts with "PROXY "
+    if (buffer.slice(0, 6).toString('ascii') === 'PROXY ') {
+      const end = buffer.indexOf('\r\n');
+      if (end === -1) return { buffer, done: false };
+      return { buffer: buffer.slice(end + 2), done: true };
+    }
+
+    // Proxy Protocol v2 signature
+    const sig = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x0d, 0x0a, 0x51, 0x55, 0x49, 0x54, 0x0a]);
+    if (buffer.length >= sig.length && buffer.subarray(0, sig.length).equals(sig)) {
+      if (buffer.length < 16) return { buffer, done: false };
+      const len = buffer.readUInt16BE(14);
+      const total = 16 + len;
+      if (buffer.length < total) return { buffer, done: false };
+      return { buffer: buffer.slice(total), done: true };
+    }
+
+    return { buffer, done: true };
+  }
+
+  function onData(chunk) {
+    buffered = Buffer.concat([buffered, chunk]);
+
+    const parsed = stripProxyProtocol(buffered);
+    if (!parsed.done) return;
+
+    buffered = parsed.buffer;
+    if (buffered.length === 0) return;
+
+    const isTls = buffered[0] === 22;
     const targetPort = isTls ? httpsPort : httpPort;
     const upstream = net.connect(targetPort, '127.0.0.1', () => {
-      upstream.write(chunk);
+      upstream.write(buffered);
       socket.pipe(upstream).pipe(socket);
     });
+
     upstream.on('error', () => {
       socket.destroy();
     });
-  });
+
+    socket.off('data', onData);
+  }
+
+  socket.on('data', onData);
 });
 
 async function start() {
