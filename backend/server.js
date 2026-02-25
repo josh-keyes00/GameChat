@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const fs = require('fs');
 const session = require('express-session');
@@ -18,7 +19,6 @@ const { registerChatSockets } = require('./sockets/chat');
 const { registerVoiceSockets } = require('./sockets/voice');
 
 const app = express();
-const server = http.createServer(app);
 
 const isProd = process.env.NODE_ENV === 'production';
 const allowedOrigins = new Set(config.clientOrigins || []);
@@ -112,6 +112,16 @@ app.get('*', (req, res) => {
 
   return res.status(503).send('Frontend build not found.');
 });
+
+let server;
+if (config.tlsKeyPath && config.tlsCertPath) {
+  const key = fs.readFileSync(config.tlsKeyPath);
+  const cert = fs.readFileSync(config.tlsCertPath);
+  server = https.createServer({ key, cert }, app);
+  console.log('HTTPS enabled for backend server.');
+} else {
+  server = http.createServer(app);
+}
 
 const io = new Server(server, {
   path: '/socket.io',

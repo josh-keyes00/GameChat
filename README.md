@@ -63,6 +63,17 @@ npm run start
 
 The app is served from `http://localhost:4000` (API + Socket.IO + static UI).
 
+### HTTPS Backend (Optional)
+
+If your Playit HTTPS tunnel is not terminating TLS (and you see `ERR_SSL_PROTOCOL_ERROR`), you can enable HTTPS directly on the backend by providing a certificate:
+
+1) Generate a local cert (example using mkcert):
+   - Install mkcert and create a cert for `localhost`
+2) Set these in `backend/.env`:
+   - `TLS_KEY_PATH=C:\path\to\localhost-key.pem`
+   - `TLS_CERT_PATH=C:\path\to\localhost.pem`
+3) Restart the backend. It will serve HTTPS on port 4000.
+
 ## Seed Users (Dev)
 
 These are created on backend start if missing:

@@ -16,7 +16,9 @@ const config = {
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   clientOrigins: parseOrigins(process.env.CLIENT_ORIGIN || 'http://localhost:5173'),
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 1073741824),
-  storageRoot: path.join(__dirname, 'storage')
+  storageRoot: path.join(__dirname, 'storage'),
+  tlsKeyPath: process.env.TLS_KEY_PATH || '',
+  tlsCertPath: process.env.TLS_CERT_PATH || ''
 };
 
 module.exports = config;
