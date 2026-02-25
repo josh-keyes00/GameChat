@@ -1,5 +1,7 @@
 const express = require('express');
+const http = require('http');
 const https = require('https');
+const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const session = require('express-session');
@@ -113,11 +115,16 @@ app.get('*', (req, res) => {
   return res.status(503).send('Frontend build not found.');
 });
 
-let server;
+const httpPort = config.port + 1;
+const httpsPort = config.port + 2;
+
+const httpServer = http.createServer(app);
+
+let httpsServer;
 if (config.tlsKeyPath && config.tlsCertPath) {
   const key = fs.readFileSync(config.tlsKeyPath);
   const cert = fs.readFileSync(config.tlsCertPath);
-  server = https.createServer({ key, cert }, app);
+  httpsServer = https.createServer({ key, cert }, app);
   console.log('HTTPS enabled for backend server (custom cert).');
 } else {
   const attrs = [{ name: 'commonName', value: 'localhost' }];
@@ -134,39 +141,84 @@ if (config.tlsKeyPath && config.tlsCertPath) {
       }
     ]
   });
-  server = https.createServer({ key: pems.private, cert: pems.cert }, app);
+  httpsServer = https.createServer({ key: pems.private, cert: pems.cert }, app);
   console.log('HTTPS enabled for backend server (self-signed).');
 }
 
-const io = new Server(server, {
-  path: '/socket.io',
-  transports: ['websocket', 'polling'],
-  cors: {
-    origin: (origin, callback) => {
-      if (isOriginAllowed(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true
-  }
-});
+function createSocketServer(server) {
+  return new Server(server, {
+    path: '/socket.io',
+    transports: ['websocket', 'polling'],
+    cors: {
+      origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      credentials: true
+    }
+  });
+}
 
-io.use((socket, next) => {
+const ioHttp = createSocketServer(httpServer);
+const ioHttps = createSocketServer(httpsServer);
+
+ioHttp.use((socket, next) => {
   sessionMiddleware(socket.request, {}, next);
 });
 
-registerChatSockets(io);
-registerVoiceSockets(io);
-app.set('io', io);
+ioHttps.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
+
+registerChatSockets(ioHttp);
+registerVoiceSockets(ioHttp);
+registerChatSockets(ioHttps);
+registerVoiceSockets(ioHttps);
+
+const ioBroadcast = {
+  to(room) {
+    return {
+      emit(event, payload) {
+        ioHttp.to(room).emit(event, payload);
+        ioHttps.to(room).emit(event, payload);
+      }
+    };
+  }
+};
+
+app.set('io', ioBroadcast);
+
+const muxServer = net.createServer((socket) => {
+  socket.once('data', (chunk) => {
+    const isTls = chunk[0] === 22;
+    const targetPort = isTls ? httpsPort : httpPort;
+    const upstream = net.connect(targetPort, '127.0.0.1', () => {
+      upstream.write(chunk);
+      socket.pipe(upstream).pipe(socket);
+    });
+    upstream.on('error', () => {
+      socket.destroy();
+    });
+  });
+});
 
 async function start() {
   await initDb();
   await seedAll();
 
-  server.listen(config.port, () => {
-    console.log(`Backend listening on ${config.port}`);
+  httpServer.listen(httpPort, () => {
+    console.log(`HTTP backend listening on ${httpPort}`);
+  });
+
+  httpsServer.listen(httpsPort, () => {
+    console.log(`HTTPS backend listening on ${httpsPort}`);
+  });
+
+  muxServer.listen(config.port, () => {
+    console.log(`Mux listening on ${config.port} (HTTP+HTTPS)`);
   });
 }
 

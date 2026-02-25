@@ -61,11 +61,12 @@ npm run build
 npm run start
 ```
 
-The app is served from `https://localhost:4000` (API + Socket.IO + static UI).
+The app is served from `http://localhost:4000` **or** `https://localhost:4000` (API + Socket.IO + static UI).
 
 ### HTTPS Backend
 
-The backend now **always** serves HTTPS on port 4000 using a self-signed cert by default.
+The backend now accepts **both HTTP and HTTPS** on port 4000. It auto-detects the protocol
+and routes to internal HTTP/HTTPS servers. This avoids SSL protocol errors with tunnels.
 If you want to use your own cert, set:
 
 - `TLS_KEY_PATH=C:\path\to\localhost-key.pem`
