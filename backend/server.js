@@ -137,7 +137,7 @@ let httpsServer;
 if (config.tlsKeyPath && config.tlsCertPath) {
   const key = fs.readFileSync(config.tlsKeyPath);
   const cert = fs.readFileSync(config.tlsCertPath);
-  httpsServer = https.createServer({ key, cert, minVersion: 'TLSv1.2', maxVersion: 'TLSv1.2' }, app);
+  httpsServer = https.createServer({ key, cert, minVersion: 'TLSv1.2' }, app);
   console.log('HTTPS enabled for backend server (custom cert).');
 } else {
   const attrs = [{ name: 'commonName', value: 'localhost' }];
@@ -166,8 +166,7 @@ if (config.tlsKeyPath && config.tlsCertPath) {
     {
       key: pems.private,
       cert: pems.cert,
-      minVersion: 'TLSv1.2',
-      maxVersion: 'TLSv1.2'
+      minVersion: 'TLSv1.2'
     },
     app
   );
