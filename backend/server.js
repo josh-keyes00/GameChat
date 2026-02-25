@@ -1,5 +1,4 @@
 const express = require('express');
-const http = require('http');
 const https = require('https');
 const path = require('path');
 const fs = require('fs');
@@ -7,6 +6,7 @@ const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const cors = require('cors');
 const { Server } = require('socket.io');
+const selfsigned = require('selfsigned');
 
 const config = require('./config');
 const { initDb } = require('./db');
@@ -118,9 +118,24 @@ if (config.tlsKeyPath && config.tlsCertPath) {
   const key = fs.readFileSync(config.tlsKeyPath);
   const cert = fs.readFileSync(config.tlsCertPath);
   server = https.createServer({ key, cert }, app);
-  console.log('HTTPS enabled for backend server.');
+  console.log('HTTPS enabled for backend server (custom cert).');
 } else {
-  server = http.createServer(app);
+  const attrs = [{ name: 'commonName', value: 'localhost' }];
+  const pems = selfsigned.generate(attrs, {
+    days: 365,
+    keySize: 2048,
+    extensions: [
+      {
+        name: 'subjectAltName',
+        altNames: [
+          { type: 2, value: 'localhost' },
+          { type: 7, ip: '127.0.0.1' }
+        ]
+      }
+    ]
+  });
+  server = https.createServer({ key: pems.private, cert: pems.cert }, app);
+  console.log('HTTPS enabled for backend server (self-signed).');
 }
 
 const io = new Server(server, {
