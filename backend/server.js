@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const cors = require('cors');
@@ -76,6 +77,13 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 
+const clientDist = path.join(__dirname, '..', 'frontend', 'dist');
+const clientIndex = path.join(clientDist, 'index.html');
+
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+}
+
 app.use('/static-apps/dnd', express.static(path.join(__dirname, 'static_apps', 'dnd')));
 
 app.use('/api/auth', authRoutes);
@@ -85,6 +93,18 @@ app.use('/api/private', privateFilesRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true });
+});
+
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/static-apps')) {
+    return res.status(404).json({ error: 'Not found.' });
+  }
+
+  if (fs.existsSync(clientIndex)) {
+    return res.sendFile(clientIndex);
+  }
+
+  return res.status(503).send('Frontend build not found.');
 });
 
 const io = new Server(server, {

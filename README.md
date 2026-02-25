@@ -10,6 +10,16 @@ Discord-style personal gaming hub with chat, DND tools iframe, and admin-only pr
 
 ## Local Setup
 
+### Option A) Run Both (Root Scripts)
+
+```powershell
+cd C:\PersonalGameChat
+npm install
+npm run dev
+```
+
+### Option B) Run Separately
+
 ### 1) Backend
 
 ```powershell
@@ -40,6 +50,18 @@ npm run dev
 ```
 
 The frontend runs on `http://localhost:5173`.
+
+## Production Build (Single Port)
+
+Build the frontend and serve it from the backend:
+
+```powershell
+cd C:\PersonalGameChat
+npm run build
+npm run start
+```
+
+The app is served from `http://localhost:4000` (API + Socket.IO + static UI).
 
 ## Seed Users (Dev)
 
@@ -78,11 +100,17 @@ The DND Tools app loads in an iframe at `/app/dnd`.
 
 ## Playit.gg Notes
 
-- Expose the backend port `4000` through Playit.gg.
-- Ensure `CLIENT_ORIGIN` in `backend/.env` matches the frontend URL you expose.
+- Expose the backend port `4000` through Playit.gg (single-port setup).
+- Ensure `CLIENT_ORIGIN` in `backend/.env` matches the Playit URL you expose.
 - For production, set `NODE_ENV=production` and use a strong `SESSION_SECRET`.
 
 ## Scripts
+
+Root (`package.json`):
+
+- `npm run dev` - run backend + frontend dev servers together
+- `npm run build` - build the frontend
+- `npm run start` - start the backend (serves built frontend)
 
 Backend (`backend/package.json`):
 
