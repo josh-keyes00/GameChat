@@ -124,13 +124,14 @@ let httpsServer;
 if (config.tlsKeyPath && config.tlsCertPath) {
   const key = fs.readFileSync(config.tlsKeyPath);
   const cert = fs.readFileSync(config.tlsCertPath);
-  httpsServer = https.createServer({ key, cert }, app);
+  httpsServer = https.createServer({ key, cert, minVersion: 'TLSv1.2' }, app);
   console.log('HTTPS enabled for backend server (custom cert).');
 } else {
   const attrs = [{ name: 'commonName', value: 'localhost' }];
   const pems = selfsigned.generate(attrs, {
     days: 365,
     keySize: 2048,
+    algorithm: 'sha256',
     extensions: [
       {
         name: 'subjectAltName',
@@ -141,7 +142,7 @@ if (config.tlsKeyPath && config.tlsCertPath) {
       }
     ]
   });
-  httpsServer = https.createServer({ key: pems.private, cert: pems.cert }, app);
+  httpsServer = https.createServer({ key: pems.private, cert: pems.cert, minVersion: 'TLSv1.2' }, app);
   console.log('HTTPS enabled for backend server (self-signed).');
 }
 
