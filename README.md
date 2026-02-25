@@ -100,7 +100,10 @@ The DND Tools app loads in an iframe at `/app/dnd`.
 
 ## Playit.gg Notes
 
-- Expose the backend port `4000` through Playit.gg (single-port setup).
+- Build and run the single-port server:
+  - `npm run build`
+  - `npm run start`
+- Expose backend port `4000` through Playit.gg (single-port setup).
 - Ensure `CLIENT_ORIGIN` in `backend/.env` matches the Playit URL you expose.
 - For production, set `NODE_ENV=production` and use a strong `SESSION_SECRET`.
 

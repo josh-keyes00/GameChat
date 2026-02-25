@@ -23,6 +23,9 @@ const server = http.createServer(app);
 const isProd = process.env.NODE_ENV === 'production';
 const allowedOrigins = new Set(config.clientOrigins || []);
 
+// Allow secure cookies and correct protocol detection when behind a proxy/tunnel.
+app.set('trust proxy', 1);
+
 function getHostFromOrigin(origin) {
   try {
     return new URL(origin).hostname;
@@ -108,6 +111,8 @@ app.get('*', (req, res) => {
 });
 
 const io = new Server(server, {
+  path: '/socket.io',
+  transports: ['websocket', 'polling'],
   cors: {
     origin: (origin, callback) => {
       if (isOriginAllowed(origin)) {
